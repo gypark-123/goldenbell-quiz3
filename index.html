@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>성경 골든벨 퀴즈</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-50 text-slate-900">
+  <div class="max-w-5xl mx-auto p-4 sm:p-6">
+    <header class="flex items-center justify-between gap-4 mb-4">
+      <h1 class="text-2xl sm:text-3xl font-bold">성경 골든벨 퀴즈</h1>
+      <div class="text-sm text-slate-500">범위 선택 → 매번 20문제 랜덤 추출 · 시험 모드</div>
+    </header>
+
+    <!-- 컨트롤 -->
+    <section class="bg-white rounded-2xl shadow p-4 sm:p-6 mb-6">
+      <div class="mb-2 font-semibold">출제 범위</div>
+      <div id="scopeButtons" class="flex flex-wrap gap-2 mb-4"></div>
+      <button id="startBtn" class="px-4 py-2 rounded-xl bg-indigo-600 text-white font-semibold hover:bg-indigo-700">랜덤 출제 시작</button>
+      <button id="gradeBtn" class="px-4 py-2 rounded-xl bg-emerald-600 text-white font-semibold hover:bg-emerald-700">채점하기</button>
+    </section>
+
+    <!-- 상태바 -->
+    <section id="statusBar" class="hidden bg-white rounded-2xl shadow p-4 sm:p-6 mb-6">
+      <div class="flex items-center justify-between mb-3">
+        <div class="font-semibold">진행도</div>
+        <div class="text-sm"><span id="progressText">0/0</span> · 점수 <span id="scoreText">0</span></div>
+      </div>
+      <div class="w-full bg-slate-200 rounded-full h-3 overflow-hidden">
+        <div id="progressBar" class="h-3 bg-indigo-600" style="width:0%"></div>
+      </div>
+    </section>
+
+    <!-- 문제 영역 -->
+    <section id="quizArea" class="grid gap-4"></section>
+  </div>
+
+  <script>
+    // ----- 출제 범위 -----
+    const BOOKS = ['사도행전','베드로전서','베드로후서','신명기','예레미야','예레미야 애가'];
+    const SCOPES = [
+      {key:'acts', label:'사도행전', books:['사도행전']},
+      {key:'peters', label:'벧전·벧후', books:['베드로전서','베드로후서']},
+      {key:'deut', label:'신명기', books:['신명기']},
+      {key:'jer', label:'예레미야', books:['예레미야']},
+      {key:'lam', label:'애가', books:['예레미야 애가']},
+      {key:'all', label:'전체', books:[...BOOKS]},
+    ];
+
+    // ----- 상태 -----
+    const state = { pool: [], current: [], answers: {}, score:0, selectedScope:'all', graded:false };
+
+    // ----- 유틸 -----
+    function shuffle(a){ const x=a.slice(); for(let i=x.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [x[i],x[j]]=[x[j],x[i]]; } return x; }
+
+    // ----- 범위 버튼 렌더링 -----
+    function renderScopes(){
+      const box=document.getElementById('scopeButtons'); box.innerHTML='';
+      SCOPES.forEach(s=>{
+        const btn=document.createElement('button');
+        btn.className=`px-3 py-2 rounded-xl border ${state.selectedScope===s.key?'bg-indigo-600 text-white':'bg-white'}`;
+        btn.textContent=s.label;
+        btn.onclick=()=>{ state.selectedScope=s.key; renderScopes(); };
+        box.appendChild(btn);
+      });
+    }
+
+    // ----- 풀 만들기 -----
+    function buildPool(){
+      const books=SCOPES.find(s=>s.key===state.selectedScope)?.books||BOOKS;
+      return state.pool.filter(p=>books.includes(p.book));
+    }
+
+    // ----- 퀴즈 시작 -----
+    function startQuiz(){
+      const pool=buildPool();
+      state.current=shuffle(pool).slice(0,20);
+      state.answers={}; state.graded=false; state.score=0;
+      renderAll();
+    }
+
+    // ----- 채점 -----
+    function gradeExam(){
+      let score=0;
+      state.current.forEach(p=>{
+        const ans=state.answers[p.id];
+        if(ans!==undefined && ans!=='' && String(p.answer).includes(ans)) score++;
+      });
+      state.score=score; state.graded=true; renderAll();
+      alert(`채점 완료! 점수: ${score}/${state.current.length}`);
+    }
+
+    // ----- 렌더링 -----
+    function renderAll(){ renderStatus(); renderQuiz(); }
+
+    function renderStatus(){
+      const total=state.current.length;
+      const solved=Object.values(state.answers).filter(v=>v&&v!=='').length;
+      document.getElementById('progressText').textContent=`${solved}/${total}`;
+      document.getElementById('scoreText').textContent=state.score;
+      document.getElementById('progressBar').style.width= total? `${Math.round((state.graded?total:solved)/total*100)}%`:'0%';
+      document.getElementById('statusBar').classList.toggle('hidden', total===0);
+    }
+
+    function renderQuiz(){
+      const wrap=document.getElementById('quizArea'); wrap.innerHTML='';
+      state.current.forEach((p,idx)=>{
+        const card=document.createElement('div'); card.className='bg-white rounded-2xl shadow p-4 sm:p-6';
+        let body='';
+        if(p.type==='mc'){
+          body='<div class="grid gap-2">';
+          p.options.forEach((opt,i)=>{
+            body+=`<button onclick="state.answers['${p.id}']=${i};renderAll();" class="border rounded-xl px-3 py-2 ${state.answers[p.id]===i?'bg-indigo-100':''}">${i+1}. ${opt}</button>`;
+          });
+          body+='</div>';
+        } else {
+          body=`<input type="text" value="${state.answers[p.id]||''}" onchange="state.answers['${p.id}']=this.value" class="w-full border rounded-xl px-3 py-2"/>`;
+          if(state.graded){ body+=`<div class="text-sm text-slate-500">정답: ${p.answer||''}</div>`; }
+        }
+        card.innerHTML=`<div class="mb-2 font-semibold">${idx+1}. ${p.question}</div>${body}`;
+        wrap.appendChild(card);
+      });
+    }
+
+    // ----- 데이터 불러오기 -----
+    fetch('goldenbell_problems.json')
+      .then(res => res.json())
+      .then(data => {
+        state.pool = data;
+        renderScopes();
+      });
+
+    document.getElementById('startBtn').onclick=startQuiz;
+    document.getElementById('gradeBtn').onclick=gradeExam;
+  </script>
+</body>
+</html>
